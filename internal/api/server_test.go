@@ -195,23 +195,14 @@ func TestHealth_NoAuthRequired(t *testing.T) {
 
 // --- X-Trace-ID ---
 
-func TestTraceID_Propagated(t *testing.T) {
+func TestTraceID_NotInResponse(t *testing.T) {
 	srv := newTestServer(t, &mockCurseForge{})
 	defer srv.Close()
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/health", nil)
 	req.Header.Set("X-Trace-ID", "my-trace-123")
 	resp, _ := http.DefaultClient.Do(req)
-	if got := resp.Header.Get("X-Trace-ID"); got != "my-trace-123" {
-		t.Errorf("X-Trace-ID = %q, want my-trace-123", got)
-	}
-}
-
-func TestTraceID_Generated(t *testing.T) {
-	srv := newTestServer(t, &mockCurseForge{})
-	defer srv.Close()
-	resp := getJSON(t, srv, "/health", false)
-	if got := resp.Header.Get("X-Trace-ID"); got == "" {
-		t.Error("expected X-Trace-ID to be generated when not provided")
+	if got := resp.Header.Get("X-Trace-ID"); got != "" {
+		t.Errorf("X-Trace-ID should not be in response headers, got %q", got)
 	}
 }
 

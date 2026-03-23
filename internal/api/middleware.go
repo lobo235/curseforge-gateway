@@ -39,7 +39,6 @@ func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 				_, _ = rand.Read(b)
 				traceID = hex.EncodeToString(b)
 			}
-			w.Header().Set("X-Trace-ID", traceID)
 			ctx := context.WithValue(r.Context(), traceIDKey, traceID)
 			r = r.WithContext(ctx)
 
