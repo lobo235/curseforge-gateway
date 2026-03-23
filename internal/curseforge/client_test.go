@@ -142,7 +142,7 @@ func TestGetMod_OK(t *testing.T) {
 
 func TestGetFiles_OK(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/mods/123/files", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/mods/123/files", func(w http.ResponseWriter, r *http.Request) {
 		resp := map[string]any{
 			"data": []map[string]any{
 				{
@@ -162,6 +162,12 @@ func TestGetFiles_OK(t *testing.T) {
 					"releaseType":  1,
 				},
 			},
+			"pagination": map[string]any{
+				"index":       0,
+				"pageSize":    50,
+				"resultCount": 2,
+				"totalCount":  2,
+			},
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
@@ -178,6 +184,68 @@ func TestGetFiles_OK(t *testing.T) {
 	}
 	if files[0].DisplayName != "ATM10-Server-1.0.zip" {
 		t.Errorf("files[0].DisplayName = %q", files[0].DisplayName)
+	}
+}
+
+func TestGetFiles_Pagination(t *testing.T) {
+	callCount := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/mods/100/files", func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		index := r.URL.Query().Get("index")
+		var resp map[string]any
+		if index == "" || index == "0" {
+			// First page: return pageSize items to signal more pages
+			files := make([]map[string]any, 50)
+			for i := range 50 {
+				files[i] = map[string]any{
+					"id":          i + 1,
+					"displayName": "file-page1",
+				}
+			}
+			resp = map[string]any{
+				"data": files,
+				"pagination": map[string]any{
+					"index":       0,
+					"pageSize":    50,
+					"resultCount": 50,
+					"totalCount":  75,
+				},
+			}
+		} else {
+			// Second page: return remaining items
+			files := make([]map[string]any, 25)
+			for i := range 25 {
+				files[i] = map[string]any{
+					"id":          i + 51,
+					"displayName": "file-page2",
+				}
+			}
+			resp = map[string]any{
+				"data": files,
+				"pagination": map[string]any{
+					"index":       50,
+					"pageSize":    50,
+					"resultCount": 25,
+					"totalCount":  75,
+				},
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+	client, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	files, err := client.GetFiles(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(files) != 75 {
+		t.Fatalf("got %d files, want 75", len(files))
+	}
+	if callCount != 2 {
+		t.Errorf("upstream called %d times, want 2", callCount)
 	}
 }
 
@@ -246,6 +314,79 @@ func TestCache_ProjectHit(t *testing.T) {
 	}
 }
 
+func TestGetFile_OK(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/mods/123/files/1001", func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"data": map[string]any{
+				"id":               1001,
+				"displayName":      "ATM10-Client-1.0.zip",
+				"fileName":         "ATM10-Client-1.0.zip",
+				"gameVersions":     []string{"1.20.1"},
+				"isServerPack":     false,
+				"serverPackFileId": 2001,
+				"releaseType":      1,
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+	client, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	file, err := client.GetFile(context.Background(), 123, 1001)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if file.ID != 1001 {
+		t.Errorf("file.ID = %d, want 1001", file.ID)
+	}
+	if file.ServerPackFileID != 2001 {
+		t.Errorf("file.ServerPackFileID = %d, want 2001", file.ServerPackFileID)
+	}
+}
+
+func TestGetFile_NotFound(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/mods/123/files/9999", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	client, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	_, err := client.GetFile(context.Background(), 123, 9999)
+	if err == nil {
+		t.Fatal("expected error for 404")
+	}
+}
+
+func TestCache_FileHit(t *testing.T) {
+	callCount := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/mods/123/files/1001", func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		resp := map[string]any{
+			"data": map[string]any{
+				"id":          1001,
+				"displayName": "cached-file.zip",
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+	client, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	_, _ = client.GetFile(context.Background(), 123, 1001)
+	f, _ := client.GetFile(context.Background(), 123, 1001)
+	if f.DisplayName != "cached-file.zip" {
+		t.Errorf("displayName = %q", f.DisplayName)
+	}
+	if callCount != 1 {
+		t.Errorf("upstream called %d times, want 1", callCount)
+	}
+}
+
 func TestCache_FilesHit(t *testing.T) {
 	callCount := 0
 	mux := http.NewServeMux()
@@ -254,6 +395,12 @@ func TestCache_FilesHit(t *testing.T) {
 		resp := map[string]any{
 			"data": []map[string]any{
 				{"id": 1, "displayName": "file1.jar"},
+			},
+			"pagination": map[string]any{
+				"index":       0,
+				"pageSize":    50,
+				"resultCount": 1,
+				"totalCount":  1,
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")

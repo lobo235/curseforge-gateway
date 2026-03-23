@@ -37,14 +37,23 @@ type Project struct {
 
 // File represents a CurseForge file (server pack or mod file).
 type File struct {
-	ID           int      `json:"id"`
-	DisplayName  string   `json:"displayName"`
-	FileName     string   `json:"fileName"`
-	GameVersions []string `json:"gameVersions"`
-	IsServerPack bool     `json:"isServerPack"`
-	DownloadURL  string   `json:"downloadUrl"`
-	FileLength   int64    `json:"fileLength"`
-	ReleaseType  int      `json:"releaseType"`
+	ID               int      `json:"id"`
+	DisplayName      string   `json:"displayName"`
+	FileName         string   `json:"fileName"`
+	GameVersions     []string `json:"gameVersions"`
+	IsServerPack     bool     `json:"isServerPack"`
+	ServerPackFileID int      `json:"serverPackFileId"`
+	DownloadURL      string   `json:"downloadUrl"`
+	FileLength       int64    `json:"fileLength"`
+	ReleaseType      int      `json:"releaseType"`
+}
+
+// paginationInfo represents the pagination metadata in CurseForge API responses.
+type paginationInfo struct {
+	Index       int `json:"index"`
+	PageSize    int `json:"pageSize"`
+	ResultCount int `json:"resultCount"`
+	TotalCount  int `json:"totalCount"`
 }
 
 // cacheEntry holds a cached value with an expiry time.
@@ -188,20 +197,74 @@ func (c *Client) GetMod(ctx context.Context, projectID int) (*Project, error) {
 	return c.GetProject(ctx, projectID, classIDMods)
 }
 
-// GetFiles fetches the file list for a CurseForge project.
+// GetFiles fetches all files for a CurseForge project, paginating through all pages.
 func (c *Client) GetFiles(ctx context.Context, projectID int) ([]File, error) {
 	cacheKey := fmt.Sprintf("files:%d", projectID)
 	if cached, ok := c.cacheGet(cacheKey); ok {
 		return cached.([]File), nil
 	}
 
-	req, err := c.newRequest(ctx, http.MethodGet, fmt.Sprintf("/mods/%d/files", projectID))
+	const pageSize = 50
+	var allFiles []File
+	index := 0
+
+	for {
+		path := fmt.Sprintf("/mods/%d/files?index=%d&pageSize=%d", projectID, index, pageSize)
+		req, err := c.newRequest(ctx, http.MethodGet, path)
+		if err != nil {
+			return nil, fmt.Errorf("creating files request: %w", err)
+		}
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("fetching files: %w", err)
+		}
+
+		if resp.StatusCode == http.StatusNotFound {
+			resp.Body.Close()
+			return nil, ErrNotFound
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			resp.Body.Close()
+			return nil, fmt.Errorf("curseforge returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var envelope struct {
+			Data       []File         `json:"data"`
+			Pagination paginationInfo `json:"pagination"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+			resp.Body.Close()
+			return nil, fmt.Errorf("decoding files response: %w", err)
+		}
+		resp.Body.Close()
+
+		allFiles = append(allFiles, envelope.Data...)
+
+		if envelope.Pagination.ResultCount < pageSize {
+			break
+		}
+		index += pageSize
+	}
+
+	c.cacheSet(cacheKey, allFiles, fileCacheTTL)
+	return allFiles, nil
+}
+
+// GetFile fetches a single file by ID for a CurseForge project.
+func (c *Client) GetFile(ctx context.Context, projectID, fileID int) (*File, error) {
+	cacheKey := fmt.Sprintf("file:%d:%d", projectID, fileID)
+	if cached, ok := c.cacheGet(cacheKey); ok {
+		return cached.(*File), nil
+	}
+
+	req, err := c.newRequest(ctx, http.MethodGet, fmt.Sprintf("/mods/%d/files/%d", projectID, fileID))
 	if err != nil {
-		return nil, fmt.Errorf("creating files request: %w", err)
+		return nil, fmt.Errorf("creating file request: %w", err)
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetching files: %w", err)
+		return nil, fmt.Errorf("fetching file: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -214,14 +277,14 @@ func (c *Client) GetFiles(ctx context.Context, projectID int) ([]File, error) {
 	}
 
 	var envelope struct {
-		Data []File `json:"data"`
+		Data File `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
-		return nil, fmt.Errorf("decoding files response: %w", err)
+		return nil, fmt.Errorf("decoding file response: %w", err)
 	}
 
-	c.cacheSet(cacheKey, envelope.Data, fileCacheTTL)
-	return envelope.Data, nil
+	c.cacheSet(cacheKey, &envelope.Data, fileCacheTTL)
+	return &envelope.Data, nil
 }
 
 // ClassIDModpacks returns the classId for modpacks.

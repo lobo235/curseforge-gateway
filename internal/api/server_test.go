@@ -28,6 +28,7 @@ type mockCurseForge struct {
 	getModpackFn func(ctx context.Context, projectID int) (*curseforge.Project, error)
 	getModFn     func(ctx context.Context, projectID int) (*curseforge.Project, error)
 	getFilesFn   func(ctx context.Context, projectID int) ([]curseforge.File, error)
+	getFileFn    func(ctx context.Context, projectID, fileID int) (*curseforge.File, error)
 }
 
 func (m *mockCurseForge) Ping(ctx context.Context) error {
@@ -54,6 +55,13 @@ func (m *mockCurseForge) GetMod(ctx context.Context, projectID int) (*curseforge
 func (m *mockCurseForge) GetFiles(ctx context.Context, projectID int) ([]curseforge.File, error) {
 	if m.getFilesFn != nil {
 		return m.getFilesFn(ctx, projectID)
+	}
+	return nil, curseforge.ErrNotFound
+}
+
+func (m *mockCurseForge) GetFile(ctx context.Context, projectID, fileID int) (*curseforge.File, error) {
+	if m.getFileFn != nil {
+		return m.getFileFn(ctx, projectID, fileID)
 	}
 	return nil, curseforge.ErrNotFound
 }
@@ -388,6 +396,101 @@ func TestGetModFiles_NotFound(t *testing.T) {
 	srv := newTestServer(t, &mockCurseForge{})
 	defer srv.Close()
 	resp := getJSON(t, srv, "/mods/999/files", true)
+	assertStatus(t, resp, http.StatusNotFound)
+}
+
+// --- GET /modpacks/{projectID}/files/{fileID} ---
+
+func TestGetModpackFile_OK(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{
+		getModpackFn: func(_ context.Context, _ int) (*curseforge.Project, error) {
+			return &curseforge.Project{ID: 123, Name: "ATM10", ClassID: 4471}, nil
+		},
+		getFileFn: func(_ context.Context, _ int, fileID int) (*curseforge.File, error) {
+			return &curseforge.File{
+				ID:               fileID,
+				DisplayName:      "ATM10-Client-1.0.zip",
+				ServerPackFileID: 5001,
+				IsServerPack:     false,
+			}, nil
+		},
+	})
+	defer srv.Close()
+
+	resp := getJSON(t, srv, "/modpacks/123/files/1001", true)
+	assertStatus(t, resp, http.StatusOK)
+
+	body := decodeJSON(t, resp)
+	if int(body["serverPackFileId"].(float64)) != 5001 {
+		t.Errorf("serverPackFileId = %v, want 5001", body["serverPackFileId"])
+	}
+}
+
+func TestGetModpackFile_NotFound(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{
+		getModpackFn: func(_ context.Context, _ int) (*curseforge.Project, error) {
+			return &curseforge.Project{ID: 123, Name: "ATM10", ClassID: 4471}, nil
+		},
+		getFileFn: func(_ context.Context, _ int, _ int) (*curseforge.File, error) {
+			return nil, curseforge.ErrNotFound
+		},
+	})
+	defer srv.Close()
+
+	resp := getJSON(t, srv, "/modpacks/123/files/9999", true)
+	assertStatus(t, resp, http.StatusNotFound)
+}
+
+func TestGetModpackFile_InvalidFileID(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{
+		getModpackFn: func(_ context.Context, _ int) (*curseforge.Project, error) {
+			return &curseforge.Project{ID: 123, Name: "ATM10", ClassID: 4471}, nil
+		},
+	})
+	defer srv.Close()
+
+	resp := getJSON(t, srv, "/modpacks/123/files/abc", true)
+	assertStatus(t, resp, http.StatusBadRequest)
+	assertErrorCode(t, resp, "invalid_body")
+}
+
+// --- GET /mods/{projectID}/files/{fileID} ---
+
+func TestGetModFile_OK(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{
+		getModFn: func(_ context.Context, _ int) (*curseforge.Project, error) {
+			return &curseforge.Project{ID: 789, Name: "JEI", ClassID: 6}, nil
+		},
+		getFileFn: func(_ context.Context, _ int, fileID int) (*curseforge.File, error) {
+			return &curseforge.File{
+				ID:          fileID,
+				DisplayName: "jei-1.0.jar",
+			}, nil
+		},
+	})
+	defer srv.Close()
+
+	resp := getJSON(t, srv, "/mods/789/files/2001", true)
+	assertStatus(t, resp, http.StatusOK)
+
+	body := decodeJSON(t, resp)
+	if body["displayName"] != "jei-1.0.jar" {
+		t.Errorf("displayName = %v, want jei-1.0.jar", body["displayName"])
+	}
+}
+
+func TestGetModFile_NotFound(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{
+		getModFn: func(_ context.Context, _ int) (*curseforge.Project, error) {
+			return &curseforge.Project{ID: 789, Name: "JEI", ClassID: 6}, nil
+		},
+		getFileFn: func(_ context.Context, _ int, _ int) (*curseforge.File, error) {
+			return nil, curseforge.ErrNotFound
+		},
+	})
+	defer srv.Close()
+
+	resp := getJSON(t, srv, "/mods/789/files/9999", true)
 	assertStatus(t, resp, http.StatusNotFound)
 }
 

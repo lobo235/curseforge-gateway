@@ -16,6 +16,7 @@ type curseforgeClient interface {
 	GetModpack(ctx context.Context, projectID int) (*curseforge.Project, error)
 	GetMod(ctx context.Context, projectID int) (*curseforge.Project, error)
 	GetFiles(ctx context.Context, projectID int) ([]curseforge.File, error)
+	GetFile(ctx context.Context, projectID, fileID int) (*curseforge.File, error)
 }
 
 // Server holds the dependencies for the HTTP server.
@@ -48,8 +49,10 @@ func (s *Server) Handler() http.Handler {
 	// Authenticated routes
 	mux.Handle("GET /modpacks/{projectID}", auth(http.HandlerFunc(s.getModpackHandler())))
 	mux.Handle("GET /modpacks/{projectID}/files", auth(http.HandlerFunc(s.getModpackFilesHandler())))
+	mux.Handle("GET /modpacks/{projectID}/files/{fileID}", auth(http.HandlerFunc(s.getModpackFileHandler())))
 	mux.Handle("GET /mods/{projectID}", auth(http.HandlerFunc(s.getModHandler())))
 	mux.Handle("GET /mods/{projectID}/files", auth(http.HandlerFunc(s.getModFilesHandler())))
+	mux.Handle("GET /mods/{projectID}/files/{fileID}", auth(http.HandlerFunc(s.getModFileHandler())))
 
 	return requestLogger(s.log)(mux)
 }

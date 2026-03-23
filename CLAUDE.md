@@ -110,8 +110,10 @@ All routes except `/health` require `Authorization: Bearer <GATEWAY_API_KEY>`.
 | GET | `/health` | No | Ping CurseForge API; return `{"status":"ok","version":"..."}` |
 | GET | `/modpacks/{projectID}` | Bearer | Validate modpack (classId=4471); return name, summary, game versions |
 | GET | `/modpacks/{projectID}/files` | Bearer | List available files for a modpack |
+| GET | `/modpacks/{projectID}/files/{fileID}` | Bearer | Get a single modpack file by ID |
 | GET | `/mods/{projectID}` | Bearer | Validate mod (classId=6); return name, summary |
 | GET | `/mods/{projectID}/files` | Bearer | List available files for a mod |
+| GET | `/mods/{projectID}/files/{fileID}` | Bearer | Get a single mod file by ID |
 
 ### Caching
 
@@ -190,5 +192,4 @@ Multi-stage build: `golang:1.24-alpine` → `alpine:3.21`. Statically compiled (
 
 ## Known Limitations
 
-- CurseForge API does not support pagination in this gateway — file lists return the default page from the API.
 - Cache is in-memory only; restarting the service clears the cache.

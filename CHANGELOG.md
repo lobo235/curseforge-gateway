@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.0] - 2026-03-23
+
+### Added
+- `GET /modpacks/{projectID}/files/{fileID}` and `GET /mods/{projectID}/files/{fileID}` endpoints for single-file lookup (enables fetching server pack files by ID)
+- `serverPackFileId` field in file responses — links client packs to their server pack files
+
 ### Changed
 - Docker build workflow resolves version from git tags for non-tag builds
+
+### Fixed
+- File listing now paginates through all CurseForge API pages (was only returning first 50 files)
 
 ## [v1.0.0] - 2026-03-23
 

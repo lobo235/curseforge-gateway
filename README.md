@@ -21,8 +21,10 @@ go run ./cmd/server
 | GET | `/health` | No | Health check + CurseForge reachability |
 | GET | `/modpacks/{projectID}` | Bearer | Validate modpack; return name, summary, game versions |
 | GET | `/modpacks/{projectID}/files` | Bearer | List available server-pack files |
+| GET | `/modpacks/{projectID}/files/{fileID}` | Bearer | Get a single modpack file by ID |
 | GET | `/mods/{projectID}` | Bearer | Validate mod; return name, summary |
 | GET | `/mods/{projectID}/files` | Bearer | List available files for a mod |
+| GET | `/mods/{projectID}/files/{fileID}` | Bearer | Get a single mod file by ID |
 
 ## Configuration
 

@@ -25,14 +25,15 @@ type modResponse struct {
 
 // fileResponse is the JSON response for individual files in a file list.
 type fileResponse struct {
-	ID           int      `json:"id"`
-	DisplayName  string   `json:"displayName"`
-	FileName     string   `json:"fileName"`
-	GameVersions []string `json:"gameVersions"`
-	IsServerPack bool     `json:"isServerPack"`
-	DownloadURL  string   `json:"downloadUrl"`
-	FileLength   int64    `json:"fileLength"`
-	ReleaseType  int      `json:"releaseType"`
+	ID               int      `json:"id"`
+	DisplayName      string   `json:"displayName"`
+	FileName         string   `json:"fileName"`
+	GameVersions     []string `json:"gameVersions"`
+	IsServerPack     bool     `json:"isServerPack"`
+	ServerPackFileID int      `json:"serverPackFileId"`
+	DownloadURL      string   `json:"downloadUrl"`
+	FileLength       int64    `json:"fileLength"`
+	ReleaseType      int      `json:"releaseType"`
 }
 
 // getModpackHandler handles GET /modpacks/{projectID}.
@@ -134,6 +135,70 @@ func (s *Server) getModFilesHandler() http.HandlerFunc {
 	}
 }
 
+// getModpackFileHandler handles GET /modpacks/{projectID}/files/{fileID}.
+func (s *Server) getModpackFileHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		projectID, err := strconv.Atoi(r.PathValue("projectID"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_body", "projectID must be an integer")
+			return
+		}
+
+		fileID, err := strconv.Atoi(r.PathValue("fileID"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_body", "fileID must be an integer")
+			return
+		}
+
+		// Validate the project exists and is a modpack.
+		_, err = s.curseforge.GetModpack(r.Context(), projectID)
+		if err != nil {
+			s.handleUpstreamError(w, "validate modpack", projectID, err)
+			return
+		}
+
+		file, err := s.curseforge.GetFile(r.Context(), projectID, fileID)
+		if err != nil {
+			s.handleUpstreamError(w, "get modpack file", projectID, err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toFileResponse(file))
+	}
+}
+
+// getModFileHandler handles GET /mods/{projectID}/files/{fileID}.
+func (s *Server) getModFileHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		projectID, err := strconv.Atoi(r.PathValue("projectID"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_body", "projectID must be an integer")
+			return
+		}
+
+		fileID, err := strconv.Atoi(r.PathValue("fileID"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_body", "fileID must be an integer")
+			return
+		}
+
+		// Validate the project exists and is a mod.
+		_, err = s.curseforge.GetMod(r.Context(), projectID)
+		if err != nil {
+			s.handleUpstreamError(w, "validate mod", projectID, err)
+			return
+		}
+
+		file, err := s.curseforge.GetFile(r.Context(), projectID, fileID)
+		if err != nil {
+			s.handleUpstreamError(w, "get mod file", projectID, err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, toFileResponse(file))
+	}
+}
+
 // handleUpstreamError maps curseforge client errors to HTTP responses.
 func (s *Server) handleUpstreamError(w http.ResponseWriter, op string, projectID int, err error) {
 	if errors.Is(err, curseforge.ErrNotFound) || errors.Is(err, curseforge.ErrWrongClass) {
@@ -160,19 +225,35 @@ func collectGameVersions(p *curseforge.Project) []string {
 	return versions
 }
 
+// toFileResponse converts a single curseforge.File to fileResponse.
+func toFileResponse(f *curseforge.File) fileResponse {
+	return fileResponse{
+		ID:               f.ID,
+		DisplayName:      f.DisplayName,
+		FileName:         f.FileName,
+		GameVersions:     f.GameVersions,
+		IsServerPack:     f.IsServerPack,
+		ServerPackFileID: f.ServerPackFileID,
+		DownloadURL:      f.DownloadURL,
+		FileLength:       f.FileLength,
+		ReleaseType:      f.ReleaseType,
+	}
+}
+
 // toFileResponses converts a slice of curseforge.File to fileResponse.
 func toFileResponses(files []curseforge.File) []fileResponse {
 	result := make([]fileResponse, len(files))
 	for i, f := range files {
 		result[i] = fileResponse{
-			ID:           f.ID,
-			DisplayName:  f.DisplayName,
-			FileName:     f.FileName,
-			GameVersions: f.GameVersions,
-			IsServerPack: f.IsServerPack,
-			DownloadURL:  f.DownloadURL,
-			FileLength:   f.FileLength,
-			ReleaseType:  f.ReleaseType,
+			ID:               f.ID,
+			DisplayName:      f.DisplayName,
+			FileName:         f.FileName,
+			GameVersions:     f.GameVersions,
+			IsServerPack:     f.IsServerPack,
+			ServerPackFileID: f.ServerPackFileID,
+			DownloadURL:      f.DownloadURL,
+			FileLength:       f.FileLength,
+			ReleaseType:      f.ReleaseType,
 		}
 	}
 	return result
