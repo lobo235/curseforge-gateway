@@ -17,6 +17,8 @@ type curseforgeClient interface {
 	GetMod(ctx context.Context, projectID int) (*curseforge.Project, error)
 	GetFiles(ctx context.Context, projectID int) ([]curseforge.File, error)
 	GetFile(ctx context.Context, projectID, fileID int) (*curseforge.File, error)
+	SearchModpacks(ctx context.Context, query string) ([]curseforge.SearchResult, error)
+	SearchMods(ctx context.Context, query string) ([]curseforge.SearchResult, error)
 }
 
 // Server holds the dependencies for the HTTP server.
@@ -53,6 +55,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /mods/{projectID}", auth(http.HandlerFunc(s.getModHandler())))
 	mux.Handle("GET /mods/{projectID}/files", auth(http.HandlerFunc(s.getModFilesHandler())))
 	mux.Handle("GET /mods/{projectID}/files/{fileID}", auth(http.HandlerFunc(s.getModFileHandler())))
+
+	// Search
+	mux.Handle("GET /search", auth(http.HandlerFunc(s.searchHandler())))
 
 	return requestLogger(s.log)(mux)
 }

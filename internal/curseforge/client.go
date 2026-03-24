@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 )
@@ -285,6 +286,71 @@ func (c *Client) GetFile(ctx context.Context, projectID, fileID int) (*File, err
 
 	c.cacheSet(cacheKey, &envelope.Data, fileCacheTTL)
 	return &envelope.Data, nil
+}
+
+// SearchResult holds a project with its game versions for search results.
+type SearchResult struct {
+	ID           int      `json:"id"`
+	Name         string   `json:"name"`
+	Summary      string   `json:"summary"`
+	ClassID      int      `json:"classId"`
+	GameVersions []string `json:"gameVersions,omitempty"`
+}
+
+// SearchProjects searches CurseForge for projects matching the query and class ID.
+// gameID 432 = Minecraft. Results are sorted by popularity.
+func (c *Client) SearchProjects(ctx context.Context, query string, classID int) ([]SearchResult, error) {
+	params := url.Values{}
+	params.Set("gameId", "432")
+	params.Set("searchFilter", query)
+	params.Set("classId", fmt.Sprintf("%d", classID))
+	params.Set("sortField", "2") // Popularity
+	params.Set("sortOrder", "desc")
+	params.Set("pageSize", "10")
+
+	req, err := c.newRequest(ctx, http.MethodGet, "/mods/search?"+params.Encode())
+	if err != nil {
+		return nil, fmt.Errorf("creating search request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("searching curseforge: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("curseforge search returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var envelope struct {
+		Data []Project `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return nil, fmt.Errorf("decoding search response: %w", err)
+	}
+
+	results := make([]SearchResult, len(envelope.Data))
+	for i, p := range envelope.Data {
+		results[i] = SearchResult{
+			ID:           p.ID,
+			Name:         p.Name,
+			Summary:      p.Summary,
+			ClassID:      p.ClassID,
+			GameVersions: p.GameVersions,
+		}
+	}
+	return results, nil
+}
+
+// SearchModpacks searches for modpacks by name.
+func (c *Client) SearchModpacks(ctx context.Context, query string) ([]SearchResult, error) {
+	return c.SearchProjects(ctx, query, classIDModpacks)
+}
+
+// SearchMods searches for mods by name.
+func (c *Client) SearchMods(ctx context.Context, query string) ([]SearchResult, error) {
+	return c.SearchProjects(ctx, query, classIDMods)
 }
 
 // ClassIDModpacks returns the classId for modpacks.

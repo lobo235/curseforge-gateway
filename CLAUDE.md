@@ -114,6 +114,7 @@ All routes except `/health` require `Authorization: Bearer <GATEWAY_API_KEY>`.
 | GET | `/mods/{projectID}` | Bearer | Validate mod (classId=6); return name, summary |
 | GET | `/mods/{projectID}/files` | Bearer | List available files for a mod |
 | GET | `/mods/{projectID}/files/{fileID}` | Bearer | Get a single mod file by ID |
+| GET | `/search?query=...&type=modpack\|mod` | Bearer | Search CurseForge by name (default type: modpack) |
 
 ### Caching
 

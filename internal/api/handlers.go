@@ -199,6 +199,62 @@ func (s *Server) getModFileHandler() http.HandlerFunc {
 	}
 }
 
+// searchResponse is the JSON response for GET /search.
+type searchResponse struct {
+	ID           int      `json:"id"`
+	Name         string   `json:"name"`
+	Summary      string   `json:"summary"`
+	ClassID      int      `json:"classId"`
+	GameVersions []string `json:"gameVersions,omitempty"`
+}
+
+// searchHandler handles GET /search?query=...&type=modpack|mod.
+func (s *Server) searchHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query().Get("query")
+		if query == "" {
+			writeError(w, http.StatusBadRequest, "missing_param", "query parameter is required")
+			return
+		}
+
+		searchType := r.URL.Query().Get("type")
+		if searchType == "" {
+			searchType = "modpack"
+		}
+
+		var results []curseforge.SearchResult
+		var err error
+
+		switch searchType {
+		case "modpack":
+			results, err = s.curseforge.SearchModpacks(r.Context(), query)
+		case "mod":
+			results, err = s.curseforge.SearchMods(r.Context(), query)
+		default:
+			writeError(w, http.StatusBadRequest, "invalid_param", "type must be 'modpack' or 'mod'")
+			return
+		}
+
+		if err != nil {
+			s.log.Error("search failed", "query", query, "type", searchType, "error", err)
+			writeError(w, http.StatusBadGateway, "upstream_error", "failed to search CurseForge")
+			return
+		}
+
+		resp := make([]searchResponse, len(results))
+		for i, r := range results {
+			resp[i] = searchResponse{
+				ID:           r.ID,
+				Name:         r.Name,
+				Summary:      r.Summary,
+				ClassID:      r.ClassID,
+				GameVersions: r.GameVersions,
+			}
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
 // handleUpstreamError maps curseforge client errors to HTTP responses.
 func (s *Server) handleUpstreamError(w http.ResponseWriter, op string, projectID int, err error) {
 	if errors.Is(err, curseforge.ErrNotFound) || errors.Is(err, curseforge.ErrWrongClass) {

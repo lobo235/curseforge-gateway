@@ -24,11 +24,13 @@ const testVersion = "v1.0.0-test"
 
 // mockCurseForge is a configurable mock that satisfies the curseforgeClient interface.
 type mockCurseForge struct {
-	pingFunc     func(ctx context.Context) error
-	getModpackFn func(ctx context.Context, projectID int) (*curseforge.Project, error)
-	getModFn     func(ctx context.Context, projectID int) (*curseforge.Project, error)
-	getFilesFn   func(ctx context.Context, projectID int) ([]curseforge.File, error)
-	getFileFn    func(ctx context.Context, projectID, fileID int) (*curseforge.File, error)
+	pingFunc         func(ctx context.Context) error
+	getModpackFn     func(ctx context.Context, projectID int) (*curseforge.Project, error)
+	getModFn         func(ctx context.Context, projectID int) (*curseforge.Project, error)
+	getFilesFn       func(ctx context.Context, projectID int) ([]curseforge.File, error)
+	getFileFn        func(ctx context.Context, projectID, fileID int) (*curseforge.File, error)
+	searchModpacksFn func(ctx context.Context, query string) ([]curseforge.SearchResult, error)
+	searchModsFn     func(ctx context.Context, query string) ([]curseforge.SearchResult, error)
 }
 
 func (m *mockCurseForge) Ping(ctx context.Context) error {
@@ -64,6 +66,20 @@ func (m *mockCurseForge) GetFile(ctx context.Context, projectID, fileID int) (*c
 		return m.getFileFn(ctx, projectID, fileID)
 	}
 	return nil, curseforge.ErrNotFound
+}
+
+func (m *mockCurseForge) SearchModpacks(ctx context.Context, query string) ([]curseforge.SearchResult, error) {
+	if m.searchModpacksFn != nil {
+		return m.searchModpacksFn(ctx, query)
+	}
+	return nil, nil
+}
+
+func (m *mockCurseForge) SearchMods(ctx context.Context, query string) ([]curseforge.SearchResult, error) {
+	if m.searchModsFn != nil {
+		return m.searchModsFn(ctx, query)
+	}
+	return nil, nil
 }
 
 // newTestServer creates a test HTTP server with the given mock CurseForge client.
