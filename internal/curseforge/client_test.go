@@ -387,6 +387,124 @@ func TestCache_FileHit(t *testing.T) {
 	}
 }
 
+func TestGetModpack_UpstreamError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/mods/123", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`internal server error`))
+	})
+	client, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	_, err := client.GetModpack(context.Background(), 123)
+	if err == nil {
+		t.Fatal("expected error for 500 response")
+	}
+}
+
+func TestGetModpack_InvalidJSON(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/mods/123", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{invalid json`))
+	})
+	client, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	_, err := client.GetModpack(context.Background(), 123)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestGetProject_CachedWrongClass(t *testing.T) {
+	// First fetch caches the project as classId=6 (mod), then requesting it as modpack should fail.
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/mods/456", func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"data": map[string]any{
+				"id":      456,
+				"name":    "Some Mod",
+				"summary": "A mod",
+				"classId": 6,
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+	client, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	// Fetch as mod — should succeed and cache.
+	_, err := client.GetMod(context.Background(), 456)
+	if err != nil {
+		t.Fatalf("GetMod: %v", err)
+	}
+
+	// Now fetch as modpack — should fail from cache with wrong class.
+	_, err = client.GetModpack(context.Background(), 456)
+	if err == nil {
+		t.Fatal("expected ErrWrongClass from cached entry")
+	}
+}
+
+func TestGetFile_UpstreamError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/mods/123/files/1001", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`server error`))
+	})
+	client, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	_, err := client.GetFile(context.Background(), 123, 1001)
+	if err == nil {
+		t.Fatal("expected error for 500 response")
+	}
+}
+
+func TestGetFile_InvalidJSON(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/mods/123/files/1001", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`not json`))
+	})
+	client, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	_, err := client.GetFile(context.Background(), 123, 1001)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestGetFiles_InvalidJSON(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/mods/123/files", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`not json`))
+	})
+	client, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	_, err := client.GetFiles(context.Background(), 123)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestClassIDConstants(t *testing.T) {
+	if curseforge.ClassIDModpacks() != 4471 {
+		t.Errorf("ClassIDModpacks() = %d, want 4471", curseforge.ClassIDModpacks())
+	}
+	if curseforge.ClassIDMods() != 6 {
+		t.Errorf("ClassIDMods() = %d, want 6", curseforge.ClassIDMods())
+	}
+}
+
 func TestCache_FilesHit(t *testing.T) {
 	callCount := 0
 	mux := http.NewServeMux()

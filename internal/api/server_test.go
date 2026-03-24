@@ -494,5 +494,234 @@ func TestGetModFile_NotFound(t *testing.T) {
 	assertStatus(t, resp, http.StatusNotFound)
 }
 
+// --- GET /modpacks/{projectID}/files error paths ---
+
+func TestGetModpackFiles_InvalidID(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{})
+	defer srv.Close()
+	resp := getJSON(t, srv, "/modpacks/abc/files", true)
+	assertStatus(t, resp, http.StatusBadRequest)
+	assertErrorCode(t, resp, "invalid_body")
+}
+
+func TestGetModpackFiles_UpstreamError(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{
+		getModpackFn: func(_ context.Context, _ int) (*curseforge.Project, error) {
+			return &curseforge.Project{ID: 123, Name: "ATM10", ClassID: 4471}, nil
+		},
+		getFilesFn: func(_ context.Context, _ int) ([]curseforge.File, error) {
+			return nil, errors.New("upstream timeout")
+		},
+	})
+	defer srv.Close()
+
+	resp := getJSON(t, srv, "/modpacks/123/files", true)
+	assertStatus(t, resp, http.StatusBadGateway)
+	assertErrorCode(t, resp, "upstream_error")
+}
+
+// --- GET /mods/{projectID}/files error paths ---
+
+func TestGetModFiles_InvalidID(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{})
+	defer srv.Close()
+	resp := getJSON(t, srv, "/mods/abc/files", true)
+	assertStatus(t, resp, http.StatusBadRequest)
+	assertErrorCode(t, resp, "invalid_body")
+}
+
+func TestGetModFiles_UpstreamError(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{
+		getModFn: func(_ context.Context, _ int) (*curseforge.Project, error) {
+			return &curseforge.Project{ID: 789, Name: "JEI", ClassID: 6}, nil
+		},
+		getFilesFn: func(_ context.Context, _ int) ([]curseforge.File, error) {
+			return nil, errors.New("upstream timeout")
+		},
+	})
+	defer srv.Close()
+
+	resp := getJSON(t, srv, "/mods/789/files", true)
+	assertStatus(t, resp, http.StatusBadGateway)
+	assertErrorCode(t, resp, "upstream_error")
+}
+
+// --- GET /mods/{projectID}/files/{fileID} error paths ---
+
+func TestGetModFile_InvalidProjectID(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{})
+	defer srv.Close()
+	resp := getJSON(t, srv, "/mods/abc/files/1001", true)
+	assertStatus(t, resp, http.StatusBadRequest)
+	assertErrorCode(t, resp, "invalid_body")
+}
+
+func TestGetModFile_InvalidFileID(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{
+		getModFn: func(_ context.Context, _ int) (*curseforge.Project, error) {
+			return &curseforge.Project{ID: 789, Name: "JEI", ClassID: 6}, nil
+		},
+	})
+	defer srv.Close()
+	resp := getJSON(t, srv, "/mods/789/files/abc", true)
+	assertStatus(t, resp, http.StatusBadRequest)
+	assertErrorCode(t, resp, "invalid_body")
+}
+
+func TestGetModFile_UpstreamError(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{
+		getModFn: func(_ context.Context, _ int) (*curseforge.Project, error) {
+			return &curseforge.Project{ID: 789, Name: "JEI", ClassID: 6}, nil
+		},
+		getFileFn: func(_ context.Context, _ int, _ int) (*curseforge.File, error) {
+			return nil, errors.New("upstream timeout")
+		},
+	})
+	defer srv.Close()
+
+	resp := getJSON(t, srv, "/mods/789/files/2001", true)
+	assertStatus(t, resp, http.StatusBadGateway)
+	assertErrorCode(t, resp, "upstream_error")
+}
+
+// --- GET /modpacks/{projectID}/files/{fileID} additional error paths ---
+
+func TestGetModpackFile_InvalidProjectID(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{})
+	defer srv.Close()
+	resp := getJSON(t, srv, "/modpacks/abc/files/1001", true)
+	assertStatus(t, resp, http.StatusBadRequest)
+	assertErrorCode(t, resp, "invalid_body")
+}
+
+func TestGetModpackFile_UpstreamError(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{
+		getModpackFn: func(_ context.Context, _ int) (*curseforge.Project, error) {
+			return &curseforge.Project{ID: 123, Name: "ATM10", ClassID: 4471}, nil
+		},
+		getFileFn: func(_ context.Context, _ int, _ int) (*curseforge.File, error) {
+			return nil, errors.New("upstream timeout")
+		},
+	})
+	defer srv.Close()
+
+	resp := getJSON(t, srv, "/modpacks/123/files/1001", true)
+	assertStatus(t, resp, http.StatusBadGateway)
+	assertErrorCode(t, resp, "upstream_error")
+}
+
+// --- GET /mods/{projectID} additional error paths ---
+
+func TestGetMod_InvalidID(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{})
+	defer srv.Close()
+	resp := getJSON(t, srv, "/mods/abc", true)
+	assertStatus(t, resp, http.StatusBadRequest)
+	assertErrorCode(t, resp, "invalid_body")
+}
+
+func TestGetMod_WrongClass(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{
+		getModFn: func(_ context.Context, _ int) (*curseforge.Project, error) {
+			return nil, curseforge.ErrWrongClass
+		},
+	})
+	defer srv.Close()
+
+	resp := getJSON(t, srv, "/mods/456", true)
+	assertStatus(t, resp, http.StatusNotFound)
+	assertErrorCode(t, resp, "not_found")
+}
+
+// --- collectGameVersions from LatestFileIndex ---
+
+func TestGetModpack_GameVersionsFromIndex(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{
+		getModpackFn: func(_ context.Context, id int) (*curseforge.Project, error) {
+			return &curseforge.Project{
+				ID:           id,
+				Name:         "Test Pack",
+				Summary:      "Pack with file index versions",
+				ClassID:      4471,
+				GameVersions: nil, // empty — should fall through to LatestFileIndex
+				LatestFileIndex: []struct {
+					GameVersion string `json:"gameVersion"`
+					FileID      int    `json:"fileId"`
+				}{
+					{GameVersion: "1.20.1", FileID: 1},
+					{GameVersion: "1.20.1", FileID: 2}, // duplicate
+					{GameVersion: "1.21.0", FileID: 3},
+					{GameVersion: "", FileID: 4}, // empty — should be skipped
+				},
+			}, nil
+		},
+	})
+	defer srv.Close()
+
+	resp := getJSON(t, srv, "/modpacks/123", true)
+	assertStatus(t, resp, http.StatusOK)
+
+	body := decodeJSON(t, resp)
+	versions, ok := body["gameVersions"].([]any)
+	if !ok {
+		t.Fatalf("gameVersions not an array: %T", body["gameVersions"])
+	}
+	if len(versions) != 2 {
+		t.Errorf("got %d game versions, want 2 (deduplicated)", len(versions))
+	}
+}
+
+// --- TraceID middleware ---
+
+func TestTraceID_Generated(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{})
+	defer srv.Close()
+
+	// Request without X-Trace-ID — middleware should generate one (we just verify no crash)
+	resp := getJSON(t, srv, "/health", false)
+	if resp.StatusCode == 0 {
+		t.Error("expected a valid response")
+	}
+}
+
+func TestTraceID_Propagated(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{})
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/health", nil)
+	req.Header.Set("X-Trace-ID", "custom-trace-id")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	// The middleware propagates trace ID into context (for logging), not into response headers.
+	// Just verify the request completes successfully.
+	if resp.StatusCode == 0 {
+		t.Error("expected a valid response")
+	}
+}
+
+// --- Auth edge cases ---
+
+func TestAuth_MalformedHeader(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{})
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/modpacks/123", nil)
+	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz") // Basic auth instead of Bearer
+	resp, _ := http.DefaultClient.Do(req)
+	assertStatus(t, resp, http.StatusUnauthorized)
+}
+
+func TestAuth_EmptyBearer(t *testing.T) {
+	srv := newTestServer(t, &mockCurseForge{})
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/modpacks/123", nil)
+	req.Header.Set("Authorization", "Bearer ")
+	resp, _ := http.DefaultClient.Do(req)
+	assertStatus(t, resp, http.StatusUnauthorized)
+}
+
 // Suppress "declared and not used" for the bytes import — used by test helper pattern.
 var _ = bytes.NewReader
