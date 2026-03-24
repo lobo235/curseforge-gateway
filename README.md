@@ -25,6 +25,7 @@ go run ./cmd/server
 | GET | `/mods/{projectID}` | Bearer | Validate mod; return name, summary |
 | GET | `/mods/{projectID}/files` | Bearer | List available files for a mod |
 | GET | `/mods/{projectID}/files/{fileID}` | Bearer | Get a single mod file by ID |
+| GET | `/search?query=...&type=modpack\|mod` | Bearer | Search CurseForge by name |
 
 ## Configuration
 
