@@ -47,6 +47,7 @@ type File struct {
 	DownloadURL      string   `json:"downloadUrl"`
 	FileLength       int64    `json:"fileLength"`
 	ReleaseType      int      `json:"releaseType"`
+	Changelog        string   `json:"changelog,omitempty"`
 }
 
 // paginationInfo represents the pagination metadata in CurseForge API responses.

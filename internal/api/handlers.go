@@ -34,6 +34,7 @@ type fileResponse struct {
 	DownloadURL      string   `json:"downloadUrl"`
 	FileLength       int64    `json:"fileLength"`
 	ReleaseType      int      `json:"releaseType"`
+	Changelog        string   `json:"changelog,omitempty"`
 }
 
 // getModpackHandler handles GET /modpacks/{projectID}.
@@ -293,6 +294,7 @@ func toFileResponse(f *curseforge.File) fileResponse {
 		DownloadURL:      f.DownloadURL,
 		FileLength:       f.FileLength,
 		ReleaseType:      f.ReleaseType,
+		Changelog:        f.Changelog,
 	}
 }
 
@@ -310,6 +312,7 @@ func toFileResponses(files []curseforge.File) []fileResponse {
 			DownloadURL:      f.DownloadURL,
 			FileLength:       f.FileLength,
 			ReleaseType:      f.ReleaseType,
+			Changelog:        f.Changelog,
 		}
 	}
 	return result
