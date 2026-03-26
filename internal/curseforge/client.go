@@ -36,18 +36,25 @@ type Project struct {
 	} `json:"latestFilesIndexes,omitempty"`
 }
 
+// FileDependency represents a dependency relationship for a CurseForge file.
+type FileDependency struct {
+	ModID        int `json:"modId"`
+	RelationType int `json:"relationType"` // 1=embedded, 2=optional, 3=required, 4=tool, 5=incompatible, 6=include
+}
+
 // File represents a CurseForge file (server pack or mod file).
 type File struct {
-	ID               int      `json:"id"`
-	DisplayName      string   `json:"displayName"`
-	FileName         string   `json:"fileName"`
-	GameVersions     []string `json:"gameVersions"`
-	IsServerPack     bool     `json:"isServerPack"`
-	ServerPackFileID int      `json:"serverPackFileId"`
-	DownloadURL      string   `json:"downloadUrl"`
-	FileLength       int64    `json:"fileLength"`
-	ReleaseType      int      `json:"releaseType"`
-	Changelog        string   `json:"changelog,omitempty"`
+	ID               int              `json:"id"`
+	DisplayName      string           `json:"displayName"`
+	FileName         string           `json:"fileName"`
+	GameVersions     []string         `json:"gameVersions"`
+	IsServerPack     bool             `json:"isServerPack"`
+	ServerPackFileID int              `json:"serverPackFileId"`
+	DownloadURL      string           `json:"downloadUrl"`
+	FileLength       int64            `json:"fileLength"`
+	ReleaseType      int              `json:"releaseType"`
+	Changelog        string           `json:"changelog,omitempty"`
+	Dependencies     []FileDependency `json:"dependencies,omitempty"`
 }
 
 // paginationInfo represents the pagination metadata in CurseForge API responses.

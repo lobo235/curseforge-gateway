@@ -23,18 +23,25 @@ type modResponse struct {
 	Summary string `json:"summary"`
 }
 
+// depResponse is the JSON response for a file dependency.
+type depResponse struct {
+	ModID        int `json:"modId"`
+	RelationType int `json:"relationType"`
+}
+
 // fileResponse is the JSON response for individual files in a file list.
 type fileResponse struct {
-	ID               int      `json:"id"`
-	DisplayName      string   `json:"displayName"`
-	FileName         string   `json:"fileName"`
-	GameVersions     []string `json:"gameVersions"`
-	IsServerPack     bool     `json:"isServerPack"`
-	ServerPackFileID int      `json:"serverPackFileId"`
-	DownloadURL      string   `json:"downloadUrl"`
-	FileLength       int64    `json:"fileLength"`
-	ReleaseType      int      `json:"releaseType"`
-	Changelog        string   `json:"changelog,omitempty"`
+	ID               int           `json:"id"`
+	DisplayName      string        `json:"displayName"`
+	FileName         string        `json:"fileName"`
+	GameVersions     []string      `json:"gameVersions"`
+	IsServerPack     bool          `json:"isServerPack"`
+	ServerPackFileID int           `json:"serverPackFileId"`
+	DownloadURL      string        `json:"downloadUrl"`
+	FileLength       int64         `json:"fileLength"`
+	ReleaseType      int           `json:"releaseType"`
+	Changelog        string        `json:"changelog,omitempty"`
+	Dependencies     []depResponse `json:"dependencies,omitempty"`
 }
 
 // getModpackHandler handles GET /modpacks/{projectID}.
@@ -282,6 +289,18 @@ func collectGameVersions(p *curseforge.Project) []string {
 	return versions
 }
 
+// toDeps converts curseforge.FileDependency slice to depResponse slice.
+func toDeps(deps []curseforge.FileDependency) []depResponse {
+	if len(deps) == 0 {
+		return nil
+	}
+	result := make([]depResponse, len(deps))
+	for i, d := range deps {
+		result[i] = depResponse{ModID: d.ModID, RelationType: d.RelationType}
+	}
+	return result
+}
+
 // toFileResponse converts a single curseforge.File to fileResponse.
 func toFileResponse(f *curseforge.File) fileResponse {
 	return fileResponse{
@@ -295,6 +314,7 @@ func toFileResponse(f *curseforge.File) fileResponse {
 		FileLength:       f.FileLength,
 		ReleaseType:      f.ReleaseType,
 		Changelog:        f.Changelog,
+		Dependencies:     toDeps(f.Dependencies),
 	}
 }
 
@@ -313,6 +333,7 @@ func toFileResponses(files []curseforge.File) []fileResponse {
 			FileLength:       f.FileLength,
 			ReleaseType:      f.ReleaseType,
 			Changelog:        f.Changelog,
+			Dependencies:     toDeps(f.Dependencies),
 		}
 	}
 	return result
